@@ -57,8 +57,10 @@ if __name__ == '__main__':
     val_loader = DataLoader(val, batch_size=BATCH_SIZE, shuffle=False)
     print("Dataset loaded!")
     model = SafetyModel(INPUT_DIM, SECOND_HIDDEN_DIMS, MINUTE_HIDDEN_DIMS, LSTM_LAYERS, BATCH_SIZE)
+    weight = torch.tensor([1, 3], dtype=torch.float)
     if torch.cuda.is_available():
         model.cuda()
-    loss_function = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+        weight = weight.cuda()
+    loss_function = nn.CrossEntropyLoss(weight=weight)
+    optimizer = optim.SGD(model.parameters(), lr=0.1)
     train(model, train_loader, val_loader, loss_function, optimizer)
