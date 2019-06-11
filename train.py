@@ -34,6 +34,9 @@ def train(model, training, validation, loss_fn, optimizer, num_epochs=NUM_EPOCHS
         model.eval()
         print("Going over validation data")
         for i, (feature, label) in enumerate(validation):
+            if torch.cuda.is_available():
+                feature = feature.cuda()
+                label = label.cuda()
             model.init_hidden()
             output = model(feature)
             loss = loss_fn(output, label)
@@ -46,7 +49,7 @@ def train(model, training, validation, loss_fn, optimizer, num_epochs=NUM_EPOCHS
         print("Epoch {}, Training loss: {}, Training accuracy: {}, Validation loss: {}, Validation accuracy: {}, Validation confusion matrix: {}".format(epoch, np.mean(training_loss), np.mean(validation_loss), training_accuracy, validation_accuracy, confusion_matrix))
 
 if __name__ == '__main__':
-    dataset = SafetyDataset("/Users/arkadyark/Downloads/data/labels/part-00000-e9445087-aa0a-433b-a7f6-7f4c19d78ad6-c000.csv", "/Users/arkadyark/Downloads/data/features/*.csv", num_files=10)
+    dataset = SafetyDataset("data/labels/part-00000-e9445087-aa0a-433b-a7f6-7f4c19d78ad6-c000.csv", "data/features/*.csv", num_files=10)
     train_size = int(0.9*len(dataset))
     val_size = len(dataset) - train_size
     training, val = random_split(dataset, [train_size, val_size])
