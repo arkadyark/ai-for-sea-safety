@@ -3,9 +3,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class AttentionModel(nn.Module):
-    def __init__(self, input_size, hidden_size, bidirectional=True):
+    def __init__(self, input_size, hidden_size, bidirectional, use_lstm):
         super(AttentionModel, self).__init__()
-        self.lstm = nn.LSTM(input_size, hidden_size, bidirectional=bidirectional)
+        if use_lstm:
+            self.rnn = nn.LSTM(input_size, hidden_size, bidirectional=bidirectional)
+        else:
+            self.rnn = nn.GRU(input_size, hidden_size, bidirectional=bidirectional)
         if bidirectional:
             hidden_size *= 2
         self.word_weight = nn.Parameter(torch.Tensor(hidden_size, hidden_size))
@@ -16,7 +19,7 @@ class AttentionModel(nn.Module):
         self.context_weight.data.normal_(0, 0.05)
 
     def forward(self, sequence, hidden_state):
-        f_output, h_output = self.lstm(sequence, hidden_state)
+        f_output, h_output = self.rnn(sequence, hidden_state)
         word_weight = self.word_weight.unsqueeze(0).expand(f_output.shape[0], -1, -1)
         output = torch.bmm(f_output, word_weight)
         word_bias = self.word_bias.expand(output.shape[0], output.shape[1], -1)

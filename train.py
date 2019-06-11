@@ -1,6 +1,6 @@
 from dataset import SafetyDataset
 from model import SafetyModel
-from config import NUM_EPOCHS, BATCH_SIZE, INPUT_DIM, SECOND_HIDDEN_DIMS, MINUTE_HIDDEN_DIMS, LSTM_LAYERS
+from config import NUM_EPOCHS, BATCH_SIZE, INPUT_DIM, SECOND_HIDDEN_DIMS, MINUTE_HIDDEN_DIMS, RNN_LAYERS, BIDIRECTIONAL, USE_LSTM
 
 import torch
 from torch.utils.data import random_split, DataLoader
@@ -56,11 +56,11 @@ if __name__ == '__main__':
     train_loader = DataLoader(training, batch_size=BATCH_SIZE, shuffle=True)
     val_loader = DataLoader(val, batch_size=BATCH_SIZE, shuffle=False)
     print("Dataset loaded!")
-    model = SafetyModel(INPUT_DIM, SECOND_HIDDEN_DIMS, MINUTE_HIDDEN_DIMS, LSTM_LAYERS, BATCH_SIZE)
+    model = SafetyModel(INPUT_DIM, SECOND_HIDDEN_DIMS, MINUTE_HIDDEN_DIMS, RNN_LAYERS, BATCH_SIZE, BIDIRECTIONAL, USE_LSTM)
     weight = torch.tensor([1, 3], dtype=torch.float)
     if torch.cuda.is_available():
         model.cuda()
         weight = weight.cuda()
-    loss_function = nn.CrossEntropyLoss(weight=weight)
+    loss_function = nn.CrossEntropyLoss(weight)
     optimizer = optim.SGD(model.parameters(), lr=0.1)
     train(model, train_loader, val_loader, loss_function, optimizer)
