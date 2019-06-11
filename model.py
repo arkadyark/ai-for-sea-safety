@@ -21,6 +21,9 @@ class SafetyModel(nn.Module):
     def init_hidden(self):
         self.second_hidden_state = (torch.zeros(2, self.batch_size, self.second_hidden_size), torch.zeros(2, self.batch_size, self.second_hidden_size))
         self.minute_hidden_state = (torch.zeros(2, self.batch_size, self.minute_hidden_size), torch.zeros(2, self.batch_size, self.minute_hidden_size))
+        if torch.cuda.is_available():
+            self.second_hidden_state = (self.second_hidden_state[0].cuda(), self.second_hidden_state[1].cuda())
+            self.minute_hidden_state = (self.minute_hidden_state[0].cuda(), self.minute_hidden_state[1].cuda())
 
     def forward(self, sequence):
         output_list = []
