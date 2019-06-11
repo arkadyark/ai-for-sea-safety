@@ -1,27 +1,35 @@
 import torch
 import torch.nn as nn
+from attention_model import AttentionModel
 
 class SafetyModel(nn.Module):
-    def __init__(self, input_dim, hidden_dim, lstm_layers, batch_size):
+    def __init__(self, input_dim, second_hidden_size, minute_hidden_size, lstm_layers, batch_size, bidirectional=True):
         super(SafetyModel, self).__init__()
-        self.lstm = nn.LSTM(input_dim, hidden_dim, lstm_layers, batch_first=True)
-        self.linear = nn.Linear(hidden_dim, 1)
-        self.sigmoid = nn.Sigmoid()
         self.batch_size = batch_size
         self.lstm_layers = lstm_layers
-        self.hidden_dim = hidden_dim
+        self.second_hidden_size = second_hidden_size
+        self.minute_hidden_size = minute_hidden_size
+        self.second_att_net = AttentionModel(input_dim, second_hidden_size, bidirectional)
+        if bidirectional:
+            second_hidden_size *= 2
+        self.minute_att_net = AttentionModel(second_hidden_size, minute_hidden_size, bidirectional)
+        if bidirectional:
+            minute_hidden_size *= 2
+        self.fc = nn.Linear(minute_hidden_size, 2)
+        self.init_hidden()
 
     def init_hidden(self):
-        return (torch.randn(self.lstm_layers, self.batch_size, self.hidden_dim),
-                torch.randn(self.lstm_layers, self.batch_size, self.hidden_dim))
+        self.second_hidden_state = (torch.zeros(2, self.batch_size, self.second_hidden_size), torch.zeros(2, self.batch_size, self.second_hidden_size))
+        self.minute_hidden_state = (torch.zeros(2, self.batch_size, self.minute_hidden_size), torch.zeros(2, self.batch_size, self.minute_hidden_size))
 
-    def forward(self, sequence, sequence_lengths):
-        self.hidden = self.init_hidden()
-        a = nn.utils.rnn.pack_padded_sequence(sequence, sequence_lengths, batch_first=True, enforce_sorted=False)
-        b, self.hidden = self.lstm(a, self.hidden)
-        c, _ = nn.utils.rnn.pad_packed_sequence(b, batch_first=True)
-        d = torch.diagonal(c[:, sequence_lengths - 1, :], 0).transpose(0, 1)
-        e = self.linear(d)
-        f = self.sigmoid(e)
-        g = f.view(self.batch_size)
-        return g
+    def forward(self, sequence):
+        output_list = []
+        sequence = sequence.permute(1, 0, 2, 3)
+        for minute in sequence:
+            output, self.second_hidden_state = self.second_att_net(minute.permute(1, 0, 2), self.second_hidden_state)
+            output_list.append(output)
+        output = torch.cat(output_list, 0)
+        output, self.minute_hidden_state = self.minute_att_net(output, self.minute_hidden_state)
+        output = output.squeeze(0)
+        output = self.fc(output)
+        return output

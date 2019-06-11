@@ -8,27 +8,32 @@ class SafetyDataset(Dataset):
         feature_files = glob.glob(features_path)
         data = pd.concat([pd.read_csv(f) for f in feature_files[:num_files]])
         grouped_data = data.sort_values('second').groupby('bookingID')
-        self.seq_lengths = [len(group) for group in grouped_data.groups.values()]
-        longest_seq = max(self.seq_lengths)
         data_groups = list(grouped_data.groups)
-        self.data = torch.zeros(len(grouped_data), longest_seq, grouped_data.get_group(0).shape[1])
+        sorted_seq_lengths = sorted([len(group) for group in grouped_data.groups.values()])
+        max_length = sorted_seq_lengths[int(0.99*len(sorted_seq_lengths))]
+        seconds, minutes = 60, int(max_length/60)
+        self.data = torch.zeros(len(grouped_data), minutes, seconds, grouped_data.get_group(0).shape[1])
         labels = pd.read_csv(labels_file)
         labels.drop_duplicates('bookingID', inplace=True)
-        self.labels = torch.zeros(len(grouped_data))
-        for i, x_len in enumerate(self.seq_lengths):
+        self.labels = torch.zeros(len(grouped_data), dtype=torch.long)
+        for i in range(len(data_groups)):
             bookingID = data_groups[i]
             sequence = grouped_data.get_group(bookingID).values
-            self.data[i, 0:x_len, :] = torch.tensor(sequence)
+            for minute in range(min(int(len(sequence)/seconds), minutes)):
+                sequence_minute = sequence[minute*seconds:(minute+1)*seconds, :]
+                if len(sequence_minute) < seconds:
+                    print("Found a sequence ({}) that wasn't long enough ({})".format(minute, len(sequence_minute)))
+                self.data[i, minute, :len(sequence_minute), :] = torch.tensor(sequence_minute)
             self.labels[i] = int(labels[labels.bookingID == bookingID].label)
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, index):
-        return {'features': self.data[index], 'length':self.seq_lengths[index], 'label':self.labels[index]}
+        return self.data[index], self.labels[index]
 
 if __name__ == '__main__':
-    dataset = SafetyDataset("data/labels/part-00000-e9445087-aa0a-433b-a7f6-7f4c19d78ad6-c000.csv", "data/features/*.csv")
+    dataset = SafetyDataset("/Users/arkadyark/Downloads/data/labels/part-00000-e9445087-aa0a-433b-a7f6-7f4c19d78ad6-c000.csv", "/Users/arkadyark/Downloads/data/features/*.csv", num_files=10)
     train_size = int(0.9*len(dataset))
     test_size = len(dataset) - train_size
     train, test = random_split(dataset, [train_size, test_size])
