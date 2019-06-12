@@ -33,7 +33,6 @@ class SafetyModel(nn.Module):
                 self.second_hidden_state = self.second_hidden_state.cuda()
                 self.minute_hidden_state = self.minute_hidden_state.cuda()
 
-
     def forward(self, sequence):
         output_list = []
         sequence = sequence.permute(1, 0, 2, 3)
