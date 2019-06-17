@@ -1,15 +1,26 @@
-from dataset import SafetyDataset
-from model import SafetyModel
-from config import NUM_EPOCHS, BATCH_SIZE, INPUT_DIM, SECOND_HIDDEN_DIMS, MINUTE_HIDDEN_DIMS, RNN_LAYERS, BIDIRECTIONAL, USE_LSTM
-
 import torch
-from torch.utils.data import random_split, DataLoader
 import numpy as np
 import torch.nn as nn
 import torch.optim as optim
+from torch.utils.data import random_split, DataLoader
 from sklearn import metrics
+from sklearn import tree
+from sklearn.tree.export import export_text
 
-def train(model, training, validation, loss_fn, optimizer, num_epochs=NUM_EPOCHS):
+from feature_dataset import SafetyFeatureDataset
+
+class SafetyFeatureModel(nn.Module):
+    def __init__(self, input_dim, hidden_dim):
+        super(SafetyFeatureModel, self).__init__()
+        self.layer = nn.Linear(input_dim, hidden_dim)
+        self.output = nn.Linear(hidden_dim, 2)
+
+    def forward(self, features):
+        output = self.layer(features)
+        output = self.output(output)
+        return output
+
+def train(model, training, validation, loss_fn, optimizer, num_epochs):
     for epoch in range(num_epochs):
         training_loss, validation_loss = [], []
         training_labels, validation_labels = [], []
@@ -21,7 +32,6 @@ def train(model, training, validation, loss_fn, optimizer, num_epochs=NUM_EPOCHS
                 feature = feature.cuda()
                 label = label.cuda()
             model.zero_grad()
-            model.init_hidden()
             output = model(feature)
             loss = loss_fn(output, label)
             loss.backward()
@@ -38,7 +48,6 @@ def train(model, training, validation, loss_fn, optimizer, num_epochs=NUM_EPOCHS
             if torch.cuda.is_available():
                 feature = feature.cuda()
                 label = label.cuda()
-            model.init_hidden()
             output = model(feature)
             loss = loss_fn(output, label)
             validation_loss.append(loss.item())
@@ -50,18 +59,37 @@ def train(model, training, validation, loss_fn, optimizer, num_epochs=NUM_EPOCHS
         print("Epoch {}, Training loss: {}, Training accuracy: {}, Validation loss: {}, Validation accuracy: {}, Validation confusion matrix: {}".format(epoch, np.mean(training_loss), np.mean(validation_loss), training_accuracy, validation_accuracy, confusion_matrix))
 
 if __name__ == '__main__':
-    dataset = SafetyDataset("/Users/arkadyark/Downloads/data/labels/part-00000-e9445087-aa0a-433b-a7f6-7f4c19d78ad6-c000.csv", "/Users/arkadyark/Downloads/data/features/*.csv", num_files=2)
+    dataset = SafetyFeatureDataset("/Users/arkadyark/Downloads/data/labels/part-00000-e9445087-aa0a-433b-a7f6-7f4c19d78ad6-c000.csv", "/Users/arkadyark/Downloads/data/features/*.csv")
     train_size = int(0.9*len(dataset))
     val_size = len(dataset) - train_size
     training, val = random_split(dataset, [train_size, val_size])
-    train_loader = DataLoader(training, batch_size=BATCH_SIZE, shuffle=True)
-    val_loader = DataLoader(val, batch_size=BATCH_SIZE, shuffle=False)
+    train_loader = DataLoader(training, batch_size=train_size, shuffle=True)
+    val_loader = DataLoader(val, batch_size=val_size, shuffle=False)
     print("Dataset loaded!")
-    model = SafetyModel(INPUT_DIM, SECOND_HIDDEN_DIMS, MINUTE_HIDDEN_DIMS, RNN_LAYERS, BATCH_SIZE, BIDIRECTIONAL, USE_LSTM)
-    weight = torch.tensor([1, 3], dtype=torch.float)
-    if torch.cuda.is_available():
-        model.cuda()
-        weight = weight.cuda()
-    loss_function = nn.CrossEntropyLoss(weight)
-    optimizer = optim.SGD(model.parameters(), lr=0.5)
-    train(model, train_loader, val_loader, loss_function, optimizer)
+    trees = []
+    for i, (feature, label) in enumerate(train_loader):
+        for max_depth in (2, 3, 5, 7, 10):
+            print("Max depth: {}".format(max_depth))
+            clf = tree.DecisionTreeClassifier(max_depth=max_depth)
+            clf = clf.fit(np.array(feature), np.array(label))
+            training_predictions = clf.predict(np.array(feature))
+            training_accuracy = metrics.accuracy_score(np.array(label), training_predictions)
+            for j, (val_feature, val_label) in enumerate(val_loader):
+                validation_predictions = clf.predict(np.array(val_feature))
+                validation_accuracy = metrics.accuracy_score(np.array(val_label), validation_predictions)
+                confusion_matrix = str(metrics.confusion_matrix(np.array(val_label), validation_predictions))
+            print(training_accuracy)
+            print(validation_accuracy)
+            print(confusion_matrix)
+            import pdb
+            pdb.set_trace()
+            r = export_text(clf, feature_names=('max_speed', 'max_dec', 'max_acc', 'max_acc_total'))
+            print(r)
+    # model = SafetyFeatureModel(4, 2)
+    # weight = torch.tensor([1, 3], dtype=torch.float)
+    # if torch.cuda.is_available():
+    #     model.cuda()
+    #     weight = weight.cuda()
+    # loss_function = nn.CrossEntropyLoss(weight)
+    # optimizer = optim.SGD(model.parameters(), lr=0.00001)
+    # train(model, train_loader, val_loader, loss_function, optimizer, 500)
